@@ -1,0 +1,50 @@
+name: security
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  secret-gate:
+    name: Secret scan (required gate)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 pinned SHA
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Gitleaks secret scan (gate)
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/repo" zricethezav/gitleaks:v8.24.3 \
+            git --source /repo --redact --exit-code 1
+
+  sast-report:
+    name: SAST (report only)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 pinned SHA
+        with:
+          persist-credentials: false
+      - name: Semgrep SAST scan (report)
+        continue-on-error: true
+        run: |
+          python -m pip install semgrep
+          semgrep scan --config p/python --metrics off .
+
+  dependency-report:
+    name: Dependencies (report only)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 pinned SHA
+        with:
+          persist-credentials: false
+      - name: Trivy dependency vulnerability scan (report)
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/repo" aquasec/trivy:0.68.2 \
+            fs --scanners vuln --exit-code 0 /repo
